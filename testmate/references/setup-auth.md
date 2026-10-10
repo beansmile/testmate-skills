@@ -13,14 +13,14 @@
 ## 1. 验证访问并确定项目
 
 ```bash
-makethisbetter project list --json
+testmate project list --json
 ```
 
-`makethisbetter info` 只显示本地状态，不能证明已登录。认证失败则运行 `/testmate setup`（Token 登录：`makethisbetter login --token <token> --api-url https://testmate.beansmile.ai/api/v1`）。按单一项目或域名匹配确定 handle，仍有歧义才询问。
+`testmate info` 只显示本地状态，不能证明已登录。认证失败则运行 `/testmate setup`（Token 登录：`testmate login --token <token>`）。按单一项目或域名匹配确定 handle，仍有歧义才询问。
 
 账号管理员可读取项目的 `signing_secret`，但**不要**打印完整响应或提取出的值。先选定一个具体的、有文档的、能从 stdin 写入目标应用服务端密钥存储且不回显的命令；然后在**同一个** `set -o pipefail` shell 中构造三段管道：
 
-1. `makethisbetter project show <handle> --json`
+1. `testmate project show <handle> --json`
 2. `jq -er '.signing_secret // error("Account admin access required")'`
 3. 该密钥管理写入命令（必须拒绝空 stdin）
 
@@ -141,7 +141,7 @@ def testmate_token():
 ## 3. 初始化 widget
 
 ```js
-MakeThisBetter.init({
+TestMate.init({
   projectKey: "mtb_proj_xxx",
   apiUrl: "https://testmate.beansmile.ai/api/v1",
   userTokenFn: async () => {
@@ -159,7 +159,7 @@ MakeThisBetter.init({
 静态 token（仅限服务端渲染、页面会话不会超过 token 有效期）：
 
 ```js
-MakeThisBetter.init({
+TestMate.init({
   projectKey: "mtb_proj_xxx",
   apiUrl: "https://testmate.beansmile.ai/api/v1",
   userToken: token,

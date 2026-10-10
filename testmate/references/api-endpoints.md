@@ -1,24 +1,25 @@
 # TestMate CLI / API Reference
 
-> TestMate（Beansmile 自托管、兼容 Make This Better）沿用上游 CLI `@makethisbetter/cli`
-> （二进制 `makethisbetter`）与 MCP `@makethisbetter/mcp`。下文命令与端点与上游一致，
-> 仅 base URL 不同：`https://testmate.beansmile.ai/api/v1`。
-> TestMate reuses the upstream CLI and MCP unchanged; only the base URL differs.
+> TestMate（Beansmile 内部的用户反馈系统）的 CLI `testmate`（`github:beansmile/testmate-cli`）与
+> MCP（`github:beansmile/testmate-mcp`）。默认 base URL：`https://testmate.beansmile.ai/api/v1`。
+> The TestMate CLI and MCP server; default base URL `https://testmate.beansmile.ai/api/v1`.
 
 ## Install
 
 ```bash
-npm install -g @makethisbetter/cli
+npm i -g github:beansmile/testmate-cli
+# or without a global install:
+npx -y github:beansmile/testmate-cli --help
 ```
 
-The CLI binary is `makethisbetter` — a precompiled Go binary; the npm package
-is a thin installer (Node is only needed to run npm itself). Alternative:
-download the binary for your platform from
-https://github.com/makethisbetter/cli/releases.
+The CLI binary is `testmate`. It is installed from GitHub (not the npm
+registry) and defaults to `https://testmate.beansmile.ai/api/v1`
+(`TESTMATE_API_URL` changes the default). In CI, `TESTMATE_API_TOKEN` can be
+used instead of a saved login.
 
 ## Config
 
-Saved at `~/.makethisbetter/config.json` with mode `600`:
+Saved at `~/.testmate/config.json` with mode `600`:
 
 ```json
 {
@@ -29,10 +30,10 @@ Saved at `~/.makethisbetter/config.json` with mode `600`:
 }
 ```
 
-不要 `cat` 该文件。用 `makethisbetter info` 查看脱敏状态。
+不要 `cat` 该文件。用 `testmate info` 查看脱敏状态。
 
 This file contains a bearer token. Do not `cat` it into agent context or logs;
-use `makethisbetter info` for masked local status and an authenticated command
+use `testmate info` for masked local status and an authenticated command
 to verify the credential.
 
 ## Commands
@@ -40,9 +41,10 @@ to verify the credential.
 ### Login（仅 Token / token only）
 
 ```bash
-makethisbetter login --token <token> --api-url https://testmate.beansmile.ai/api/v1
-makethisbetter login --token "$TESTMATE_API_TOKEN" --api-url https://testmate.beansmile.ai/api/v1
-makethisbetter login --account-id acct_xxx
+testmate login --token <token>
+testmate login --token "$TESTMATE_API_TOKEN"
+testmate login --token <token> --api-url https://<other-testmate-host>/api/v1
+testmate login --account-id acct_xxx
 ```
 
 TestMate 不支持邮箱 OTP（`--email` / `--send-only` / `--otp` 不可用）。Token 在
@@ -52,13 +54,13 @@ TestMate has no email OTP; create tokens in the dashboard and save them with `--
 ### Feedback list
 
 ```bash
-makethisbetter feedback list --project acme
-makethisbetter feedback list --project acme --status received
-makethisbetter feedback list --project acme --label Safari
-makethisbetter feedback list --project acme --priority high
-makethisbetter feedback list --project acme --sort priority
-makethisbetter feedback list --project acme --archived
-makethisbetter feedback list --project acme --json
+testmate feedback list --project acme
+testmate feedback list --project acme --status received
+testmate feedback list --project acme --label Safari
+testmate feedback list --project acme --priority high
+testmate feedback list --project acme --sort priority
+testmate feedback list --project acme --archived
+testmate feedback list --project acme --json
 ```
 
 Filters: `--status`, `--label`, `--priority`. `--project` is required. AI selects
@@ -70,8 +72,8 @@ Sort: `priority`, `created`, `updated`.
 ### Feedback show
 
 ```bash
-makethisbetter feedback show <handle/FB-n> --md    # read first: original context and attachment links
-makethisbetter feedback show acme/FB-1 --json      # only when structured fields are needed
+testmate feedback show <handle/FB-n> --md    # read first: original context and attachment links
+testmate feedback show acme/FB-1 --json      # only when structured fields are needed
 ```
 
 Displays full feedback detail: description, AI analysis, reporter, page URL,
@@ -88,10 +90,10 @@ misses.
 ### Project list / show / create / update
 
 ```bash
-makethisbetter project list [--json]
-makethisbetter project show <handle> [--json]
-makethisbetter project create <name> --handle <handle> --domain example.com [--ai-context "..."] [--json]
-makethisbetter project update <handle> [--name <name>] [--domain <domain>] [--ai-context "..."] [--json]
+testmate project list [--json]
+testmate project show <handle> [--json]
+testmate project create <name> --handle <handle> --domain example.com [--ai-context "..."] [--json]
+testmate project update <handle> [--name <name>] [--domain <domain>] [--ai-context "..."] [--json]
 ```
 
 `show` returns `api_key` (the widget `projectKey`), `board_url`, and
@@ -108,16 +110,16 @@ setup should allowlist the fields it prints and must not expose
 ### Feedback lifecycle
 
 ```bash
-makethisbetter feedback pick <handle/FB-n>                        # status -> in_progress
-makethisbetter feedback pick <handle/FB-n> --takeover             # replace the current assignee
-makethisbetter feedback respond <handle/FB-n> --body-file <path>  # queued notice -> closed(responded)
-makethisbetter feedback archive <handle/FB-n>                     # hide one Unclaimed Feedback
-makethisbetter feedback restore <handle/FB-n>                     # return one archived Feedback
-makethisbetter feedback ready <handle/FB-n> --summary "<what changed>" # status -> pending_release
-makethisbetter feedback release --project <handle> --through <deployed-sha> # scoped deployed matches -> closed(shipped)
-makethisbetter feedback decline <handle/FB-n>                     # closed(not_planned)
-makethisbetter feedback duplicate <handle/FB-n> --canonical <handle/FB-m> # closed(duplicate)
-makethisbetter feedback reopen <handle/FB-n>                      # closed -> received
+testmate feedback pick <handle/FB-n>                        # status -> in_progress
+testmate feedback pick <handle/FB-n> --takeover             # replace the current assignee
+testmate feedback respond <handle/FB-n> --body-file <path>  # queued notice -> closed(responded)
+testmate feedback archive <handle/FB-n>                     # hide one Unclaimed Feedback
+testmate feedback restore <handle/FB-n>                     # return one archived Feedback
+testmate feedback ready <handle/FB-n> --summary "<what changed>" # status -> pending_release
+testmate feedback release --project <handle> --through <deployed-sha> # scoped deployed matches -> closed(shipped)
+testmate feedback decline <handle/FB-n>                     # closed(not_planned)
+testmate feedback duplicate <handle/FB-n> --canonical <handle/FB-m> # closed(duplicate)
+testmate feedback reopen <handle/FB-n>                      # closed -> received
 ```
 
 Commands accept `--json` for machine-readable output. `ready --summary` is

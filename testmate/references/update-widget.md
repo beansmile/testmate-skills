@@ -4,16 +4,16 @@
 
 ## 硬性规则 / Hard Rules
 
-- 不要读取或打印 `~/.makethisbetter/config.json`（含 bearer token）。用 `makethisbetter info` 查看脱敏状态。
+- 不要读取或打印 `~/.testmate/config.json`（含 bearer token）。用 `testmate info` 查看脱敏状态。
 - 只询问项目**尚未配置**的新选项；已配置的保持不变，除非用户明确要求修改。
-- **例外：** `apiUrl` 缺失或不是 `https://testmate.beansmile.ai/api/v1` 时，这是错误而非可选项——报告并修正（否则反馈会发往 makethisbetter.dev）。
+- **例外：** `apiUrl` 缺失或不是 `https://testmate.beansmile.ai/api/v1` 时，这是错误而非可选项——报告并修正（SDK 默认值只适用于生产服务器，连接其他 TestMate 服务器时会把反馈发错地方）。
 - Signing Secret 不得出现在源码、浏览器代码、聊天、总结或日志中。
 - 不要提交测试反馈。
 
 ## 1. 前置检查
 
 ```bash
-command -v makethisbetter && makethisbetter project list --json >/dev/null
+command -v testmate && testmate project list --json >/dev/null
 ```
 
 任一失败 → 提示先运行 `/testmate setup` 并停止。
@@ -21,17 +21,18 @@ command -v makethisbetter && makethisbetter project list --json >/dev/null
 ## 2. 定位现有安装
 
 ```bash
-grep -rn "MakeThisBetter.init(" --include="*.js" --include="*.ts" --include="*.erb" --include="*.html" --include="*.vue" --include="*.svelte" --include="*.tsx" --include="*.jsx" --include="*.liquid" --include="*.php" .
+grep -rn "TestMate.init(" --include="*.js" --include="*.ts" --include="*.erb" --include="*.html" --include="*.vue" --include="*.svelte" --include="*.tsx" --include="*.jsx" --include="*.liquid" --include="*.php" .
 ```
 
-依次查看：`app/javascript/`、`app/assets/`、`app/views/layouts/`、`src/` / `pages/` / `components/`、`*.html` / `*.liquid` / `*.php` / `*.jsp`。Turbo 安装中配置可能在 `meta[name="makethisbetter-config"]` 的 `data-*` 属性里。未找到 `init(` → 提示运行 `/testmate setup` 并停止。记录文件路径和完整配置对象。
+依次查看：`app/javascript/`、`app/assets/`、`app/views/layouts/`、`src/` / `pages/` / `components/`、`*.html` / `*.liquid` / `*.php` / `*.jsp`。Turbo 安装中配置可能在 `meta[name="testmate-config"]` 的 `data-*` 属性里。未找到 `init(` → 提示运行 `/testmate setup` 并停止。记录文件路径和完整配置对象。
 
 ## 3. 解析当前配置
 
 | 选项 | 类型 | 默认值 |
 |---|---|---|
 | `projectKey` | string | *(必填)* |
-| `apiUrl` | string | SDK 默认指向 makethisbetter.dev；**TestMate 必填** `https://testmate.beansmile.ai/api/v1` |
+| `apiUrl` | string | SDK 默认 `https://testmate.beansmile.ai/api/v1`；**始终显式填写** |
+| `recorderUrl` | string | `https://testmate.beansmile.ai/widget/rrweb-record.js` |
 | `entryMode` | `'button'` \| `'api'` | `'button'` |
 | `locale` | string | `document.documentElement.lang ?? 'en'` |
 | `position` | `'left'` \| `'right'` | `'right'` |
@@ -65,38 +66,29 @@ grep -rn "MakeThisBetter.init(" --include="*.js" --include="*.ts" --include="*.e
 
 ## 5. 检查 widget 版本
 
-Import Map / vendored：
+线上最新构建的提交号：
 
 ```bash
-head -5 vendor/javascript/makethisbetter.js 2>/dev/null
-npm view makethisbetter version
+curl -fsSL https://testmate.beansmile.ai/widget/VERSION
 ```
 
-npm 安装：
+npm 安装（从 GitHub 安装，`package.json` 中为 `"@beansmile/testmate-widget": "github:beansmile/testmate-widget"`）：
 
 ```bash
-node -p "require('makethisbetter/package.json').version" 2>/dev/null || \
-  jq -r '.dependencies.makethisbetter // .devDependencies.makethisbetter' package.json
-npm view makethisbetter version
+node -p "require('@beansmile/testmate-widget/package.json').version" 2>/dev/null
+grep -A3 '"node_modules/@beansmile/testmate-widget"' package-lock.json 2>/dev/null | grep resolved
 ```
 
-CDN：确认使用主版本固定的 `https://unpkg.com/makethisbetter@1`（自动获得最新 minor，无需更新）。
+lockfile 中锁定的提交落后于 `VERSION` 时报告并建议更新：`npm i github:beansmile/testmate-widget`（或 `npm update @beansmile/testmate-widget`）。
 
-落后时报告并建议更新。Import Map：
-
-```bash
-curl -sL "https://unpkg.com/makethisbetter@<VERSION>/dist/makethisbetter.standalone.js" -o vendor/javascript/makethisbetter.js
-head -1 vendor/javascript/makethisbetter.js | grep -qE '^const |^var |^import |^/[/*]' || { echo "Downloaded content is not JS, CDN may not have synced"; exit 1; }
-```
-
-npm：`npm update makethisbetter`。
+Script 标签 / Import Map：确认指向 `https://testmate.beansmile.ai/widget/testmate.js`（或 `testmate.esm.js`），服务器部署即更新，无需操作。若仍指向旧的第三方 CDN 或旧包名，报告并改为上述地址。
 
 ## 6. 应用修改
 
 就地编辑 `init()`，保留 `projectKey`、已有选项、代码风格与周边代码。只写非默认值（`apiUrl` 必须存在）：
 
 ```diff
- MakeThisBetter.init({
+ TestMate.init({
    projectKey: "mtb_proj_xxx",
 +  apiUrl: "https://testmate.beansmile.ai/api/v1",
    locale: "zh-CN",
@@ -115,9 +107,9 @@ npm：`npm update makethisbetter`。
 
 ### English summary
 
-Locate the existing `MakeThisBetter.init(` call, make sure `apiUrl` is
+Locate the existing `TestMate.init(` call, make sure `apiUrl` is
 `https://testmate.beansmile.ai/api/v1` (fix it if missing — that is a bug, not
 an option), infer recommendations only for options not yet configured, confirm
-them in one question, check the installed `makethisbetter` version against npm
-latest (`@1` CDN needs nothing), apply the edits in place, and verify. Never read
+them in one question, check the installed `@beansmile/testmate-widget` commit against
+`https://testmate.beansmile.ai/widget/VERSION` (script tags served by the server need nothing), apply the edits in place, and verify. Never read
 the CLI config file and never submit test feedback here.

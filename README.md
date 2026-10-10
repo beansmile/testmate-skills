@@ -16,12 +16,13 @@
 
 ## 简介
 
-TestMate 是 Beansmile 自托管、兼容 [Make This Better](https://makethisbetter.dev) 的用户反馈服务，部署在
+TestMate 是 Beansmile 内部的自托管用户反馈系统，部署在
 `https://testmate.beansmile.ai`。本仓库提供 `/testmate` Agent skill（Claude Code、Cursor、Codex 等），
 让 Agent 直接读取反馈（截图、录屏、控制台错误、AI 分析）、修复、标记 ready，并在部署后 release。
 
-底层沿用上游兼容的 CLI [`@makethisbetter/cli`](https://github.com/makethisbetter/cli) 与
-MCP [`@makethisbetter/mcp`](https://github.com/makethisbetter/mcp)，只是 API 指向 TestMate。
+配套客户端：CLI [`beansmile/testmate-cli`](https://github.com/beansmile/testmate-cli)（命令 `testmate`）、
+MCP [`beansmile/testmate-mcp`](https://github.com/beansmile/testmate-mcp)、
+widget [`beansmile/testmate-widget`](https://github.com/beansmile/testmate-widget)（也由服务器直接提供 `/widget/testmate.js`）。
 
 | | |
 |---|---|
@@ -51,33 +52,33 @@ git clone --depth 1 https://github.com/beansmile/testmate-skills.git /tmp/testma
 TestMate 不使用邮箱验证码。在 Dashboard 的 `/settings/tokens` 创建 Token 后：
 
 ```bash
-npm install -g @makethisbetter/cli
-makethisbetter login --token <token> --api-url https://testmate.beansmile.ai/api/v1
-# 或：makethisbetter login --token "$TESTMATE_API_TOKEN" --api-url https://testmate.beansmile.ai/api/v1
+npm i -g github:beansmile/testmate-cli
+testmate login --token <token>
+# 或：testmate login --token "$TESTMATE_API_TOKEN"
 ```
 
-配置保存在 `~/.makethisbetter/config.json`。可选 MCP（读取同一配置的 `api_url`）：
+配置保存在 `~/.testmate/config.json`。可选 MCP（读取同一配置的 `api_url`）：
 
 ```bash
-claude mcp add --scope user makethisbetter -- npx -y @makethisbetter/mcp@latest
+claude mcp add --scope user testmate -- npx -y github:beansmile/testmate-mcp
 ```
 
 ## Widget
 
 ```bash
-npm i makethisbetter
+npm i github:beansmile/testmate-widget
 ```
 
 ```js
-import { MakeThisBetter } from "makethisbetter"
+import { TestMate } from "@beansmile/testmate-widget"
 
-MakeThisBetter.init({
+TestMate.init({
   projectKey: "mtb_proj_xxx",
   apiUrl: "https://testmate.beansmile.ai/api/v1", // 必填
 })
 ```
 
-或 CDN：`<script src="https://unpkg.com/makethisbetter@1"></script>`，同样必须传 `apiUrl`。
+或 script 标签：`<script src="https://testmate.beansmile.ai/widget/testmate.js"></script>`（全局 `TestMate`），同样必须传 `apiUrl`。
 项目的 `domain` 必须与宿主站点 origin 一致（开发环境允许 `localhost`）。
 
 ## 命令
@@ -101,7 +102,7 @@ MakeThisBetter.init({
   → /testmate pick acme/FB-1
   → 修复并提交，trailer: Feedback: acme/FB-1
   → /testmate ready acme/FB-1 --summary "修复 Safari 登录按钮"
-  → 生产部署后：makethisbetter feedback release --project acme --through <deployed-sha>
+  → 生产部署后：testmate feedback release --project acme --through <deployed-sha>
 ```
 
 CI 中 release 需要完整 Git 历史：GitLab CI `GIT_DEPTH: 0`，GitHub Actions `fetch-depth: 0`。
@@ -113,17 +114,17 @@ CI 中 release 需要完整 Git 历史：GitLab CI `GIT_DEPTH: 0`，GitHub Actio
 
 ## English
 
-TestMate is Beansmile's self-hosted, Make This Better–compatible feedback server
+TestMate is Beansmile's internal, self-hosted user feedback system
 at `https://testmate.beansmile.ai` (API `https://testmate.beansmile.ai/api/v1`).
 This repo ships the `/testmate` agent skill for Claude Code, Cursor, Codex and
 other agents supported by [`skills`](https://github.com/vercel-labs/skills).
 
 - Install: `npx skills add beansmile/testmate-skills`, then run `/testmate setup`.
 - Login is token-only: create a token at `/settings/tokens`, then
-  `makethisbetter login --token <token> --api-url https://testmate.beansmile.ai/api/v1`.
-- The CLI (`@makethisbetter/cli`) and MCP (`@makethisbetter/mcp`) are the
-  upstream packages, used unchanged.
-- The widget (`makethisbetter` on npm, or `https://unpkg.com/makethisbetter@1`)
+  `testmate login --token <token>`.
+- CLI: `npm i -g github:beansmile/testmate-cli` (bin `testmate`, config `~/.testmate/config.json`);
+  MCP: `claude mcp add --scope user testmate -- npx -y github:beansmile/testmate-mcp`.
+- The widget (`npm i github:beansmile/testmate-widget`, or `<script src="https://testmate.beansmile.ai/widget/testmate.js">`)
   must be initialised with `apiUrl: 'https://testmate.beansmile.ai/api/v1'`, and
   the project `domain` must match the host site's origin (localhost is allowed in dev).
 - Loop: `list` → `pick` → commit with `Feedback: <handle>/FB-n` → `ready --summary` →
