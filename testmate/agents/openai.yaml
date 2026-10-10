@@ -1,0 +1,4 @@
+interface:
+  display_name: "TestMate"
+  short_description: "Set up, authenticate, and manage TestMate (Beansmile) feedback."
+  default_prompt: "/testmate list"
