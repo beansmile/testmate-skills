@@ -56,6 +56,7 @@ TestMate has no email OTP; create tokens in the dashboard and save them with `--
 ```bash
 testmate feedback list --project acme
 testmate feedback list --project acme --status received
+testmate feedback list --project acme --status pending_verification   # QA-enabled projects only
 testmate feedback list --project acme --label Safari
 testmate feedback list --project acme --priority high
 testmate feedback list --project acme --sort priority
@@ -116,7 +117,9 @@ testmate feedback respond <handle/FB-n> --body-file <path>  # queued notice -> c
 testmate feedback archive <handle/FB-n>                     # hide one Unclaimed Feedback
 testmate feedback restore <handle/FB-n>                     # return one archived Feedback
 testmate feedback ready <handle/FB-n> --summary "<what changed>" # status -> pending_release
-testmate feedback release --project <handle> --through <deployed-sha> # scoped deployed matches -> closed(shipped)
+testmate feedback release --project <handle> --through <deployed-sha> # scoped deployed matches -> closed(shipped), or pending_verification on QA-enabled projects
+testmate feedback verify <handle/FB-n> [--note "…"] [--evidence <url>] # pending_verification -> closed(shipped)
+testmate feedback reject <handle/FB-n> --note "<what failed>" [--evidence <url>] # pending_verification -> in_progress (same assignee)
 testmate feedback decline <handle/FB-n>                     # closed(not_planned)
 testmate feedback duplicate <handle/FB-n> --canonical <handle/FB-m> # closed(duplicate)
 testmate feedback reopen <handle/FB-n>                      # closed -> received
@@ -130,8 +133,46 @@ Project. `pick` claims Feedback for the authenticated user.
 It returns `409 Conflict` without changing the Feedback when another team
 member is assigned; use `--takeover` only when the user explicitly asks to
 replace that assignee. Status values are
-`received`, `in_progress`, `pending_release`, `closed`; `shipped`, `responded`,
-`not_planned`, and `duplicate` are `close_reason` values on `closed`.
+`received`, `in_progress`, `pending_release`, `pending_verification`, `closed`;
+`shipped`, `responded`, `not_planned`, and `duplicate` are `close_reason` values
+on `closed`. `pending_verification` only occurs on projects with QA verification
+turned on.
+
+### QA verification (TestMate-only, opt-in per project)
+
+When a project has QA verification turned on (Settings → General → "Require QA
+verification before closing", `Project.requireVerification`), `release` moves
+Feedback to `pending_verification` (shown as "Verifying" / 「待验证」) instead
+of closing it:
+
+```text
+pending_release -> pending_verification -> closed(shipped)   # verify
+                          `-> in_progress (same assignee)     # reject
+```
+
+`release` text output then splits the released items:
+
+```text
+Released: demo/FB-12, demo/FB-13
+  Closed (shipped): demo/FB-13
+  Moved to Verifying (waiting for QA): demo/FB-12
+Skipped: none
+```
+
+and `release --json` adds `closed` and `verifying` arrays next to the upstream
+`released` / `skipped` / `failures`.
+
+- `verify` accepts an optional `--note` (max 2000 characters) and `--evidence`
+  (http(s) URL). Any project member, including the fixer, or a QA bot token
+  can call it. Repeating it after `closed(shipped)` returns the same outcome.
+- `reject` requires `--note` (what failed). The assignee and resolution summary
+  stay. The rejection counts as a reopen for release evidence: commit the fix
+  again with the same `Feedback:` trailer, then `ready` and `release` again.
+- Both only accept Feedback in `pending_verification`; otherwise the API
+  returns `409 invalid_transition`.
+- MCP: `verify` (`feedback_id`, optional `note`, `evidence_url`) and `reject`
+  (`feedback_id`, required `note`, optional `evidence_url`); `list` accepts
+  `status: "pending_verification"`.
 
 `respond` requires a UTF-8 body file or `-` for stdin. Agent workflows must use
 a real file path containing final user-supplied and confirmed text; Agents must
@@ -193,7 +234,9 @@ GET /api/v1/projects/acme/feedbacks?status=received
 Authorization: Bearer token_...
 ```
 
-Query params: `status`, `label`, `priority`, `limit` (1-200), and `account_id`.
+Query params: `status` (`received`, `in_progress`, `pending_release`,
+`pending_verification`, `closed`), `label`, `priority`, `limit` (1-200), and
+`account_id`.
 `feedback_type` remains a deprecated read-only alias for `label`. The response
 exposes `labels` as an array of AI-managed Project Label names.
 
@@ -236,7 +279,7 @@ that assignee. Feedback responses include `assignee` as `{ "id": "user_...",
 "name": "..." }` or `null`.
 `canonical_feedback_id` uses a fully qualified same-Project reference such as
 `acme/FB-1`. Project Labels are read-only through this API. Generic PATCH cannot
-write `pending_release`, `closed(shipped)`, or `closed(responded)`. Sending only
+write `pending_release`, `pending_verification`, `closed(shipped)`, or `closed(responded)`. Sending only
 `status: received` for closed Feedback invokes reopen (Account Owners/Admins, Active Pro Members, and assigned Team Members).
 
 ### Respond and close
@@ -295,13 +338,33 @@ Content-Type: application/json
 ```
 
 Requires `pending_release` with a saved Resolution Summary. If the trailer time
-is not later than the latest reopen event, the API returns `409` and leaves the
-Feedback unchanged.
+is not later than the latest reopen (or failed verification) event, the API
+returns `409` and leaves the Feedback unchanged. On projects with QA
+verification turned on, the response status is `pending_verification` instead
+of `closed`.
+
+### Record QA verification (TestMate-only)
+
+```http
+POST /api/v2/projects/acme/feedbacks/1/verification
+Authorization: Bearer token_...
+Content-Type: application/json
+
+{ "feedback_verification": { "outcome": "passed", "note": "Checked on Safari 18", "evidence_url": "https://ci.example.com/runs/42" } }
+{ "feedback_verification": { "outcome": "failed", "note": "Export still returns an empty CSV" } }
+```
+
+Requires `pending_verification`. `passed` closes it as `closed(shipped)`;
+`note` and `evidence_url` are optional. `failed` requires `note` (`422
+missing_note` otherwise) and returns it to `in_progress` with the same
+assignee. `evidence_url` must be http(s) (`422`). Other statuses return `409
+invalid_transition`. The response is the bare Feedback, like readiness and
+release.
 
 ## Error Codes
 
 - `401`: invalid or expired token.
 - `404`: feedback not found.
-- `409`: Feedback is already assigned, or release evidence predates the latest reopen.
-- `422`: invalid parameters.
+- `409`: Feedback is already assigned, release evidence predates the latest reopen or failed verification, or `invalid_transition` (e.g. verify/reject on Feedback that is not in `pending_verification`).
+- `422`: invalid parameters (`missing_note` when rejecting without a note).
 - `429`: rate limited.
